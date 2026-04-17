@@ -1,16 +1,17 @@
 @echo off
+chcp 65001 >nul
 setlocal EnableDelayedExpansion
 
 :: ============================================================
 :: VencordAutoInstaller.bat
-:: Laedt Vencord CLI Installer herunter, installiert Vencord,
-:: traegt sich in den Autostart ein und prueft bei jedem Start
+:: Lädt Vencord CLI Installer herunter, installiert Vencord,
+:: trägt sich in den Autostart ein und prüft bei jedem Start
 :: ob Vencord noch in Discord injiziert ist.
 :: Wenn nicht, wird es automatisch im Hintergrund neu installiert.
 :: ============================================================
 
 :: --- Hintergrund-Modus ---
-:: Wenn mit Parameter /silent aufgerufen, laeuft es komplett unsichtbar
+:: Wenn mit Parameter /silent aufgerufen, läuft es komplett unsichtbar
 :: Beim ersten manuellen Start wird nur der Autostart eingerichtet
 if /I "%~1"=="/silent" goto :SilentMode
 
@@ -37,6 +38,7 @@ set "LOG_FILE=%INSTALL_DIR%\vencord_installer.log"
 set "DISCORD_LOCAL=%LOCALAPPDATA%\Discord"
 set "DISCORD_PTB_LOCAL=%LOCALAPPDATA%\DiscordPTB"
 set "DISCORD_CANARY_LOCAL=%LOCALAPPDATA%\DiscordCanary"
+set "PATCHED_ASAR_MAX_SIZE=50000"
 
 :: --- Installationsverzeichnis erstellen ---
 if not exist "%INSTALL_DIR%" (
@@ -49,23 +51,23 @@ if not exist "%INSTALL_DIR%" (
 
 call :Log "VencordAutoInstaller gestartet (Modus: %~1)"
 
-:: --- VBS-Launcher fuer Hintergrund-Autostart erstellen ---
+:: --- VBS-Launcher für Hintergrund-Autostart erstellen ---
 call :CreateVBSLauncher
 
-:: --- Autostart-Eintrag pruefen und setzen (nutzt VBS fuer unsichtbaren Start) ---
+:: --- Autostart-Eintrag prüfen und setzen (nutzt VBS für unsichtbaren Start) ---
 call :SetupAutostart
 
-:: --- Pruefen ob Vencord Installer-Exe vorhanden ist ---
+:: --- Prüfen ob Vencord Installer-Exe vorhanden ist ---
 call :CheckAndDownloadInstaller
 
-:: --- Pruefen ob Vencord in Discord injiziert ist ---
+:: --- Prüfen ob Vencord in Discord injiziert ist ---
 call :CheckVencordInjection
 if "!VENCORD_INSTALLED!"=="0" (
     call :Log "Vencord ist NICHT in Discord injiziert. Starte Neuinstallation..."
     call :Output "[INFO] Vencord nicht in Discord gefunden. Installiere neu..."
     call :InstallVencord
 ) else (
-    call :Log "Vencord ist in Discord injiziert. Keine Aktion noetig."
+    call :Log "Vencord ist in Discord injiziert. Keine Aktion nötig."
     call :Output "[OK] Vencord ist installiert und aktiv."
 )
 
@@ -73,7 +75,7 @@ call :Log "VencordAutoInstaller abgeschlossen"
 if not defined SILENT (
     echo.
     echo ============================================
-    echo  Vencord Pruefung abgeschlossen
+    echo  Vencord Prüfung abgeschlossen
     echo ============================================
     timeout /t 5 /nobreak >nul
 )
@@ -106,7 +108,7 @@ exit /b 0
     )
     goto :eof
 
-:: --- Autostart einrichten (via VBS fuer unsichtbaren Start) ---
+:: --- Autostart einrichten (via VBS für unsichtbaren Start) ---
 :SetupAutostart
     reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "%AUTOSTART_NAME%" >nul 2>&1
     if errorlevel 1 (
@@ -117,14 +119,14 @@ exit /b 0
             call :Output "[FEHLER] Konnte Autostart-Eintrag nicht setzen."
         ) else (
             call :Log "Autostart-Eintrag gesetzt (via VBS-Launcher)"
-            call :Output "[OK] Autostart-Eintrag gesetzt (laeuft unsichtbar im Hintergrund)."
+            call :Output "[OK] Autostart-Eintrag gesetzt (läuft unsichtbar im Hintergrund)."
         )
     ) else (
         call :Output "[OK] Autostart-Eintrag bereits vorhanden."
     )
     goto :eof
 
-:: --- Installer-Exe pruefen und ggf. herunterladen ---
+:: --- Installer-Exe prüfen und ggf. herunterladen ---
 :CheckAndDownloadInstaller
     if exist "%INSTALLER_EXE%" (
         call :Output "[OK] Vencord Installer gefunden."
@@ -141,7 +143,7 @@ exit /b 0
     where curl >nul 2>&1
     if not errorlevel 1 (
         call :Output "[INFO] Verwende curl zum Download..."
-        curl -L -s -o "%INSTALLER_EXE%" "%DOWNLOAD_URL%"
+        curl -L -# -o "%INSTALLER_EXE%" "%DOWNLOAD_URL%"
         if exist "%INSTALLER_EXE%" (
             call :Output "[OK] Download erfolgreich."
             call :Log "Download via curl erfolgreich"
@@ -149,8 +151,11 @@ exit /b 0
         )
     )
     call :Output "[INFO] Verwende PowerShell zum Download..."
-    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    PowerShell -NoProfile -ExecutionPolicy Bypass -Command ^
         "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%DOWNLOAD_URL%' -OutFile '%INSTALLER_EXE%' -UseBasicParsing" >nul 2>&1
+    if errorlevel 1 (
+        call :Log "FEHLER: PowerShell Download-Befehl fehlgeschlagen"
+    )
     if exist "%INSTALLER_EXE%" (
         call :Output "[OK] Download via PowerShell erfolgreich."
         call :Log "Download via PowerShell erfolgreich"
@@ -160,8 +165,8 @@ exit /b 0
     )
     goto :eof
 
-:: --- Pruefen ob Vencord tatsaechlich in Discord injiziert ist ---
-:: Prueft jedes Discord-Verzeichnis einzeln auf Vencord-Dateien
+:: --- Prüfen ob Vencord tatsächlich in Discord injiziert ist ---
+:: Prüft jedes Discord-Verzeichnis einzeln auf Vencord-Dateien
 :CheckVencordInjection
     set "VENCORD_INSTALLED=0"
     call :CheckSingleDiscordDir "%DISCORD_LOCAL%"
@@ -171,7 +176,7 @@ exit /b 0
     call :CheckSingleDiscordDir "%DISCORD_CANARY_LOCAL%"
     goto :eof
 
-:: --- Einzelnes Discord-Verzeichnis auf Vencord-Injektion pruefen ---
+:: --- Einzelnes Discord-Verzeichnis auf Vencord-Injektion prüfen ---
 :CheckSingleDiscordDir
     set "CHECK_DIR=%~1"
     if not exist "%CHECK_DIR%" goto :eof
@@ -185,8 +190,8 @@ exit /b 0
 
     set "APP_DIR=%CHECK_DIR%\!LATEST_APP!"
 
-    :: Methode 1: Pruefe ob _app.asar (Backup) existiert
-    :: Das ist der zuverlaessigste Indikator dass Vencord injiziert ist
+    :: Methode 1: Prüfe ob _app.asar (Backup) existiert
+    :: Das ist der zuverlässigste Indikator dass Vencord injiziert ist
     if exist "!APP_DIR!\resources\_app.asar" (
         set "VENCORD_INSTALLED=1"
         call :Log "Vencord gefunden in: !APP_DIR! (_app.asar Backup vorhanden)"
@@ -194,10 +199,10 @@ exit /b 0
         goto :eof
     )
 
-    :: Methode 2: Pruefe ob app.asar gepatchte Version ist (deutlich kleiner)
+    :: Methode 2: Prüfe ob app.asar gepatchte Version ist (deutlich kleiner)
     if exist "!APP_DIR!\resources\app.asar" (
         for %%F in ("!APP_DIR!\resources\app.asar") do (
-            if %%~zF LSS 50000 (
+            if %%~zF LSS %PATCHED_ASAR_MAX_SIZE% (
                 set "VENCORD_INSTALLED=1"
                 call :Log "Vencord (gepatchte app.asar) gefunden in: !APP_DIR!"
                 call :Output "[OK] Vencord (gepatchte app.asar) gefunden in: !APP_DIR!"
@@ -205,7 +210,7 @@ exit /b 0
         )
     )
 
-    :: Methode 3: Pruefe ob ein app-Ordner mit Vencord-Patcher existiert
+    :: Methode 3: Prüfe ob ein app-Ordner mit Vencord-Patcher existiert
     if exist "!APP_DIR!\resources\app\patcher.js" (
         set "VENCORD_INSTALLED=1"
         call :Log "Vencord (patcher.js) gefunden in: !APP_DIR!"
@@ -221,11 +226,11 @@ exit /b 0
         goto :eof
     )
 
-    :: Pruefe ob Discord laeuft
+    :: Prüfe ob Discord läuft
     tasklist /FI "IMAGENAME eq Discord.exe" 2>nul | find /I "Discord.exe" >nul
     if not errorlevel 1 (
-        call :Output "[INFO] Discord laeuft. Schliesse Discord..."
-        call :Log "Discord laeuft, schliesse es"
+        call :Output "[INFO] Discord läuft. Schließe Discord..."
+        call :Log "Discord läuft, schließe es"
         taskkill /IM Discord.exe /F >nul 2>&1
         timeout /t 3 /nobreak >nul
     )
@@ -254,30 +259,30 @@ exit /b 0
         )
     )
 
-    :: Ergebnis pruefen
+    :: Ergebnis prüfen
     call :CheckVencordInjection
     if "!VENCORD_INSTALLED!"=="1" (
         call :Output "[OK] Vencord erfolgreich installiert."
         call :Log "Vencord erfolgreich installiert"
     ) else (
-        call :Output "[FEHLER] Vencord Installation moeglicherweise fehlgeschlagen."
-        call :Log "WARNUNG: Vencord Installation moeglicherweise fehlgeschlagen"
+        call :Output "[FEHLER] Vencord Installation möglicherweise fehlgeschlagen."
+        call :Log "WARNUNG: Vencord Installation möglicherweise fehlgeschlagen"
     )
     goto :eof
 
-:: --- Vencord fuer einen bestimmten Discord-Pfad installieren ---
+:: --- Vencord für einen bestimmten Discord-Pfad installieren ---
 :InstallForPath
     set "TARGET_PATH=%~1"
-    call :Output "[INFO] Starte Vencord Installation fuer: %TARGET_PATH%"
-    call :Log "Starte Vencord CLI Installation fuer: %TARGET_PATH%"
+    call :Output "[INFO] Starte Vencord Installation für: %TARGET_PATH%"
+    call :Log "Starte Vencord CLI Installation für: %TARGET_PATH%"
 
-    :: --location und --branch sind gegenseitig ausschliessend, daher nur --location
+    :: --location und --branch sind gegenseitig ausschließend, daher nur --location
     "%INSTALLER_EXE%" --install --location "%TARGET_PATH%"
     if not errorlevel 1 (
         set "INSTALL_SUCCESS=1"
-        call :Log "Installation erfolgreich fuer: %TARGET_PATH%"
+        call :Log "Installation erfolgreich für: %TARGET_PATH%"
         goto :eof
     )
 
-    call :Log "Installation mit --location fehlgeschlagen fuer: %TARGET_PATH%"
+    call :Log "Installation mit --location fehlgeschlagen für: %TARGET_PATH%"
     goto :eof
